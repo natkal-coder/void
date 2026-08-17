@@ -11,7 +11,9 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { URI } from '../../../../base/common/uri.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { chat_userMessageContent, isABuiltinToolName } from '../common/prompt/prompts.js';
+import { chat_userMessageContent, isABuiltinToolName, messageOfSelection } from '../common/prompt/prompts.js';
+import { IRLMReplService } from '../common/rlmReplService.js';
+import { RLMContextInfo, RLMContextPart } from '../common/rlmReplTypes.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
 import { generateUuid } from '../../../../base/common/uuid.js';
 import { FeatureName, ModelSelection, ModelSelectionOptions } from '../common/voidSettingsTypes.js';
@@ -327,6 +329,7 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		@IDirectoryStrService private readonly _directoryStringService: IDirectoryStrService,
 		@IFileService private readonly _fileService: IFileService,
 		@IMCPService private readonly _mcpService: IMCPService,
+		@IRLMReplService private readonly _rlmReplService: IRLMReplService,
 	) {
 		super()
 		this.state = { allThreads: {}, currentThreadId: null as unknown as string } // default state
@@ -729,6 +732,35 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 
+	// collect every selection attached anywhere in the thread (deduped) and read its full
+	// contents - in RLM mode these become the REPL `context` instead of message content
+	private async _gatherRLMContextParts(threadId: string): Promise<RLMContextPart[]> {
+		const thread = this.state.allThreads[threadId]
+		if (!thread) return []
+		const selections: StagingSelectionItem[] = []
+		const seen = new Set<string>()
+		for (const m of thread.messages) {
+			if (m.role !== 'user') continue
+			for (const s of m.selections ?? []) {
+				const key = JSON.stringify([s.type, s.uri.toString(), s.type === 'CodeSelection' ? s.range : null])
+				if (seen.has(key)) continue
+				seen.add(key)
+				selections.push(s)
+			}
+		}
+		const parts = await Promise.all(selections.map(async (s): Promise<RLMContextPart> => {
+			const name = s.uri.fsPath + (s.type === 'CodeSelection' ? ` (lines ${s.range[0]}:${s.range[1]})` : '')
+			const text = await messageOfSelection(s, {
+				directoryStrService: this._directoryStringService,
+				fileService: this._fileService,
+				folderOpts: { maxChildren: 500, maxCharsPerFile: 1_000_000 },
+			})
+			return { name, text }
+		}))
+		return parts
+	}
+
+
 	private async _runChatAgent({
 		threadId,
 		modelSelection,
@@ -750,6 +782,18 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 		// above just defines helpers, below starts the actual function
 		const { chatMode } = this._settingsService.state.globalSettings // should not change as we loop even if user changes it, so it goes here
 		const { overridesOfModel } = this._settingsService.state
+
+		// RLM mode: load the attached selections into the REPL as `context` before the loop starts
+		let rlmContextInfo: RLMContextInfo | undefined = undefined
+		if (chatMode === 'rlm' && modelSelection) {
+			const parts = await this._gatherRLMContextParts(threadId)
+			const res = await this._rlmReplService.ensureSessionForThread(threadId, parts, modelSelection)
+			if ('error' in res) {
+				this._setStreamState(threadId, { isRunning: undefined, error: { message: res.error, fullError: null } })
+				return
+			}
+			rlmContextInfo = res.info
+		}
 
 		let nMessagesSent = 0
 		let shouldSendAnotherMessage = true
@@ -780,7 +824,8 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 			const { messages, separateSystemMessage } = await this._convertToLLMMessagesService.prepareLLMChatMessages({
 				chatMessages,
 				modelSelection,
-				chatMode
+				chatMode,
+				rlmContextInfo,
 			})
 
 			if (interruptedWhenIdle) {
@@ -1250,7 +1295,9 @@ We only need to do it for files that were edited since `from`, ie files between 
 		const instructions = userMessage
 		const currSelns: StagingSelectionItem[] = _chatSelections ?? thread.state.stagingSelections
 
-		const userMessageContent = await chat_userMessageContent(instructions, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService }) // user message + names of files (NOT content)
+		// in RLM mode, selection contents go to the REPL `context`, not into the message
+		const selectionNamesOnly = this._settingsService.state.globalSettings.chatMode === 'rlm'
+		const userMessageContent = await chat_userMessageContent(instructions, currSelns, { directoryStrService: this._directoryStringService, fileService: this._fileService, selectionNamesOnly })
 		const userHistoryElt: ChatMessage = { role: 'user', content: userMessageContent, displayContent: instructions, selections: currSelns, state: defaultMessageState }
 		this._addMessageToThread(threadId, userHistoryElt)
 

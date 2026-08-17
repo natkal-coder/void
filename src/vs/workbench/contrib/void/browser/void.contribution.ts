@@ -69,6 +69,8 @@ import './voidSCMService.js'
 // llmMessage
 import '../common/sendLLMMessageService.js'
 
+import '../common/rlmReplService.js'
+
 // voidSettings
 import '../common/voidSettingsService.js'
 
