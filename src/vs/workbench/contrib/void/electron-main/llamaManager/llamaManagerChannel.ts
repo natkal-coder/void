@@ -94,7 +94,7 @@ export class LlamaManagerChannel implements IServerChannel {
 		if (await isHealthy()) return { ok: true } // something (possibly user-managed) already serves the port
 		const { binaryPath, modelPath } = this._find()
 		if (!binaryPath) return { ok: false, error: `llama-server binary not found. Expected in ${this._candidateDirs().join(' or ')}.` }
-		if (!modelPath) return { ok: false, error: `No .gguf model found. Run "Void: Set Up Local Ornith Model" to download it.` }
+		if (!modelPath) return { ok: false, error: `No .gguf model found. Run "OrnithIDE: Set Up Local Ornith Model" to download it.` }
 
 		try { this.serverProc?.kill() } catch { }
 		// flags mirror the reference Ornith deployment; -ngl 99 is a no-op without a GPU build

@@ -18,7 +18,7 @@ registerAction2(class extends Action2 {
 		super({
 			f1: true,
 			id: 'void.setupLocalOrnith',
-			title: localize2('voidSetupOrnith', 'Void: Set Up Local Ornith Model'),
+			title: localize2('voidSetupOrnith', 'OrnithIDE: Set Up Local Ornith Model'),
 		});
 	}
 	async run(accessor: ServicesAccessor) {
