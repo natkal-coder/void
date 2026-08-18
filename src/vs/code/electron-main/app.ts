@@ -134,6 +134,7 @@ import { VoidSCMService } from '../../workbench/contrib/void/electron-main/voidS
 import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMTypes.js';
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 import { RLMReplChannel } from '../../workbench/contrib/void/electron-main/rlmRepl/rlmReplChannel.js';
+import { LlamaManagerChannel } from '../../workbench/contrib/void/electron-main/llamaManager/llamaManagerChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1258,6 +1259,10 @@ export class CodeApplication extends Disposable {
 		// Void added this - RLM (Recursive Language Model) REPL
 		const rlmReplChannel = new RLMReplChannel();
 		mainProcessElectronServer.registerChannel('void-channel-rlm-repl', rlmReplChannel);
+
+		// Void added this - bundled local llama.cpp server / Ornith model manager
+		const llamaManagerChannel = new LlamaManagerChannel();
+		mainProcessElectronServer.registerChannel('void-channel-llama-manager', llamaManagerChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

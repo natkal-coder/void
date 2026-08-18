@@ -71,6 +71,9 @@ import '../common/sendLLMMessageService.js'
 
 import '../common/rlmReplService.js'
 
+import '../common/llamaManagerService.js'
+import './llamaManagerActions.js'
+
 // voidSettings
 import '../common/voidSettingsService.js'
 

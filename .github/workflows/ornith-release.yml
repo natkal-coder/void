@@ -1,0 +1,101 @@
+# Cross-platform packaging for the Ornith-enabled Void fork.
+#
+# Produces unsigned archives for Windows/Linux/macOS. Two variants:
+#   - default (small): app only; the model downloads in-app on first use
+#     ("Void: Set Up Local Ornith Model", resumable)
+#   - offline (bundle_model input): staples llama-server + the Ornith .gguf into the package
+#     via build/ornith-offline-bundle.sh. Needs a runner with ~20GB free disk. GitHub
+#     Releases caps single files at 2GB, so offline artifacts must ship via an external
+#     store (S3/R2/HF), not release assets.
+#
+# NOT handled here (required before selling):
+#   - rebrand product.json (Apache 2.0 grants no "Void" trademark rights)
+#   - macOS codesign + notarization (Apple Developer ID), Windows Authenticode signing
+#   - auto-update endpoints (disable or self-host)
+name: ornith-release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bundle_model:
+        description: 'Bundle llama-server + model into the package (offline variant)'
+        type: boolean
+        default: false
+      model_url:
+        description: 'Direct .gguf URL for the offline bundle'
+        type: string
+        default: 'https://huggingface.co/ornith-ai/Ornith-1.0-9B-GGUF/resolve/main/ornith-1.0-9b-Q4_K_M.gguf'
+
+jobs:
+  package:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            gulp_task: vscode-linux-x64-min
+            out_dir: VSCode-linux-x64
+            llama_asset_suffix: bin-ubuntu-x64.tar.gz
+          - os: windows-2022
+            gulp_task: vscode-win32-x64-min
+            out_dir: VSCode-win32-x64
+            llama_asset_suffix: bin-win-cpu-x64.zip
+          - os: macos-14
+            gulp_task: vscode-darwin-arm64-min
+            out_dir: VSCode-darwin-arm64
+            llama_asset_suffix: bin-macos-arm64.tar.gz
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+
+      - name: Linux build deps
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxkbfile-dev libsecret-1-dev libkrb5-dev
+
+      - name: Install dependencies
+        run: npm ci
+        env:
+          npm_config_arch: x64
+
+      - name: Build React UI
+        run: npm run buildreact
+
+      - name: Package
+        run: node ./node_modules/gulp/bin/gulp.js ${{ matrix.gulp_task }}
+
+      # llama.cpp cuts releases near-daily; resolve the latest tag at build time instead of pinning.
+      # bsdtar on the Windows runner extracts .zip; GNU tar handles the .tar.gz on linux/mac.
+      - name: Bundle model (offline variant)
+        if: inputs.bundle_model
+        shell: bash
+        run: |
+          TAG=$(curl -s https://api.github.com/repos/ggml-org/llama.cpp/releases/latest | jq -r .tag_name)
+          ASSET="llama-$TAG-${{ matrix.llama_asset_suffix }}"
+          curl -L -o llama-archive "https://github.com/ggml-org/llama.cpp/releases/download/$TAG/$ASSET"
+          mkdir -p llama-bin && tar -xf llama-archive -C llama-bin
+          BIN=$(find llama-bin -name 'llama-server*' -type f | head -1)
+          curl -L -o model.gguf "${{ inputs.model_url }}"
+          APP_DIR="../${{ matrix.out_dir }}"
+          [ "${{ runner.os }}" = "macOS" ] && APP_DIR="../${{ matrix.out_dir }}/Void.app"
+          bash build/ornith-offline-bundle.sh "$APP_DIR" "$BIN" model.gguf
+
+      - name: Archive
+        if: runner.os != 'Windows'
+        run: tar -czf ${{ matrix.out_dir }}.tar.gz -C .. ${{ matrix.out_dir }}
+
+      - name: Archive (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path ..\${{ matrix.out_dir }} -DestinationPath ${{ matrix.out_dir }}.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.out_dir }}
+          path: |
+            ${{ matrix.out_dir }}.tar.gz
+            ${{ matrix.out_dir }}.zip
+          if-no-files-found: error
