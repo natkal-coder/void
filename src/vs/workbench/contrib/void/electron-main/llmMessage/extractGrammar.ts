@@ -225,6 +225,12 @@ const parseXMLPrefixToToolCall = <T extends ToolName,>(toolName: T, toolId: stri
 			if (latestMatchedOpenParam !== null) {
 				paramsObj[latestMatchedOpenParam] += pm.value()
 			}
+			// single-param leniency: small models often write <tool>content</tool> without the
+			// param tag; if the tool has exactly one param and none matched, the content IS the param
+			else if (allowedParams.length === 1 && pm.value().trim()) {
+				paramsObj[allowedParams[0]] = pm.value()
+				if (isDone) doneParams.push(allowedParams[0])
+			}
 			return getAnswer()
 		}
 		else {

@@ -129,15 +129,20 @@ export function rlmReplWorkerMain(nodeRequire: (m: string) => any) {
 				? 'No user variables defined yet. (Only `var`-declared variables are listed.)'
 				: 'Variables: ' + vars.map(k => k + ' (' + typeof sandbox[k] + ')').join(', ')
 		}
-		Object.assign(sandbox, scaffold)
+		// non-writable: small models sometimes write `var context = "...placeholder..."` in their
+		// code, which would poison that execution's results; in sloppy mode the assignment is a
+		// silent no-op instead, so their scans always hit the real data
+		for (const k of Object.keys(scaffold)) {
+			Object.defineProperty(sandbox, k, { value: scaffold[k], writable: false, enumerable: true, configurable: false })
+		}
 		vmContext = vm.createContext(sandbox)
 		return contextStr.length
 	}
 
-	// re-bind scaffold names after every exec so `context = null` etc. can't corrupt the session
+	// belt-and-braces after every exec (non-writable props already block most corruption)
 	const restoreScaffold = () => {
 		for (const k of Object.keys(scaffold)) {
-			if (sandbox[k] !== scaffold[k]) sandbox[k] = scaffold[k]
+			try { if (sandbox[k] !== scaffold[k]) sandbox[k] = scaffold[k] } catch { }
 		}
 	}
 
