@@ -11,7 +11,15 @@ import { IStorageService, StorageScope, StorageTarget } from '../../../../platfo
 import { URI } from '../../../../base/common/uri.js';
 import { Emitter, Event } from '../../../../base/common/event.js';
 import { ILLMMessageService } from '../common/sendLLMMessageService.js';
-import { chat_userMessageContent, isABuiltinToolName, messageOfSelection } from '../common/prompt/prompts.js';
+import { chat_userMessageContent, isABuiltinToolName, messageOfSelection, readFile, DEFAULT_FILE_SIZE_LIMIT } from '../common/prompt/prompts.js';
+
+// cheap binary detection for RLM folder ingestion: extension blocklist + null-byte sniff
+const BINARY_EXTS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'ico', 'icns', 'pdf', 'zip', 'tar', 'gz', 'tgz', 'xz', 'bz2', '7z', 'rar', 'jar', 'gguf', 'litertlm', 'task', 'bin', 'exe', 'dll', 'so', 'dylib', 'a', 'o', 'pyc', 'pyd', 'class', 'wasm', 'woff', 'woff2', 'ttf', 'otf', 'eot', 'mp3', 'mp4', 'mov', 'avi', 'mkv', 'wav', 'ogg', 'flac', 'sqlite', 'db', 'parquet', 'arrow', 'npy', 'npz', 'pt', 'pth', 'ckpt', 'safetensors', 'onnx', 'pb', 'tflite', 'lock'])
+const looksBinaryPath = (fsPath: string) => {
+	const ext = fsPath.split('.').pop()?.toLowerCase() ?? ''
+	return BINARY_EXTS.has(ext)
+}
+const looksBinaryContent = (val: string) => val.slice(0, 8000).includes('\u0000')
 import { IRLMReplService } from '../common/rlmReplService.js';
 import { RLMContextInfo, RLMContextPart } from '../common/rlmReplTypes.js';
 import { AnthropicReasoning, getErrorMessage, RawToolCallObj, RawToolParamsObj } from '../common/sendLLMMessageTypes.js';
@@ -733,7 +741,9 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 
 
 	// collect every selection attached anywhere in the thread (deduped) and read its full
-	// contents - in RLM mode these become the REPL `context` instead of message content
+	// contents - in RLM mode these become the REPL `context` instead of message content.
+	// Folders are traversed ourselves (not via messageOfSelection) so we can skip binaries
+	// and lift the folder caps - RLM's whole point is that context size is not prompt size.
 	private async _gatherRLMContextParts(threadId: string): Promise<RLMContextPart[]> {
 		const thread = this.state.allThreads[threadId]
 		if (!thread) return []
@@ -748,15 +758,27 @@ class ChatThreadService extends Disposable implements IChatThreadService {
 				selections.push(s)
 			}
 		}
-		const parts = await Promise.all(selections.map(async (s): Promise<RLMContextPart> => {
-			const name = s.uri.fsPath + (s.type === 'CodeSelection' ? ` (lines ${s.range[0]}:${s.range[1]})` : '')
-			const text = await messageOfSelection(s, {
-				directoryStrService: this._directoryStringService,
-				fileService: this._fileService,
-				folderOpts: { maxChildren: 500, maxCharsPerFile: 1_000_000 },
-			})
-			return { name, text }
-		}))
+		const parts: RLMContextPart[] = []
+		for (const s of selections) {
+			if (s.type === 'Folder') {
+				const uris = await this._directoryStringService.getAllURIsInDirectory(s.uri, { maxResults: 100_000 })
+				for (const uri of uris) {
+					if (looksBinaryPath(uri.fsPath)) continue
+					const { val } = await readFile(this._fileService, uri, DEFAULT_FILE_SIZE_LIMIT)
+					if (val === null || looksBinaryContent(val)) continue
+					parts.push({ name: uri.fsPath, text: val })
+				}
+			}
+			else {
+				const name = s.uri.fsPath + (s.type === 'CodeSelection' ? ` (lines ${s.range[0]}:${s.range[1]})` : '')
+				const text = await messageOfSelection(s, {
+					directoryStrService: this._directoryStringService,
+					fileService: this._fileService,
+					folderOpts: { maxChildren: 500, maxCharsPerFile: 1_000_000 },
+				})
+				parts.push({ name, text })
+			}
+		}
 		return parts
 	}
 

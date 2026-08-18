@@ -19,6 +19,10 @@ export const defaultProviderSettings = {
 	deepseek: {
 		apiKey: '',
 	},
+	// first local provider in key order = wins default model auto-selection on fresh installs
+	liteRT: { // Google LiteRT-LM's official OpenAI-compatible server (litert-community models)
+		endpoint: 'http://localhost:8087',
+	},
 	ollama: {
 		endpoint: 'http://127.0.0.1:11434',
 	},
@@ -50,9 +54,6 @@ export const defaultProviderSettings = {
 	},
 	llamaServer: { // llama.cpp llama-server (serves Ornith 9B by default)
 		endpoint: 'http://localhost:8086',
-	},
-	liteRT: { // OrnithIDE's built-in bridge around Google LiteRT-LM (litert-community models)
-		endpoint: 'http://localhost:8087',
 	},
 	liteLLM: { // https://docs.litellm.ai/docs/providers/openai_compatible
 		endpoint: '',
@@ -1259,20 +1260,26 @@ const llamaServerSettings: VoidStaticProviderInfo = {
 	},
 }
 
+// gemma-4 E2B/E4B litert builds support up to 32K, but RecurseIDE's manager configures
+// `litert-lm serve` with max_num_tokens 8192 (LITERT_MAX_NUM_TOKENS) to stay under ~1GB
+// of KV cache on <2GB-VRAM laptop GPUs - prompts past the serve limit get HTTP 500,
+// so the advertised window must match the SERVE config, not the model's ceiling.
+const litertGemmaOptions = {
+	contextWindow: 8_192, reservedOutputTokenSpace: 1_024,
+	supportsSystemMessage: 'system-role', supportsFIM: false, reasoningCapabilities: false,
+	cost: { input: 0, output: 0 }, downloadable: { sizeGb: 'not-known' },
+} as const satisfies Omit<VoidStaticModelInfo, 'downloadable'> & { downloadable: { sizeGb: 'not-known' } }
+
 const liteRTSettings: VoidStaticProviderInfo = {
-	// most litert-community builds have ekv4096 (4K) contexts; gemma-4 E2B/E4B litertlm go to 32K
+	// most litert-community builds have ekv4096 (4K) contexts
 	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' }, contextWindow: 4_096, reservedOutputTokenSpace: 1_024, supportsSystemMessage: 'system-role', reasoningCapabilities: false }),
 	modelOptions: {
-		'gemma-4-E2B-it': {
-			contextWindow: 32_768, reservedOutputTokenSpace: 2_048,
-			supportsSystemMessage: 'system-role', supportsFIM: false, reasoningCapabilities: false,
-			cost: { input: 0, output: 0 }, downloadable: { sizeGb: 2.6 },
-		},
-		'gemma-4-E4B-it': {
-			contextWindow: 32_768, reservedOutputTokenSpace: 2_048,
-			supportsSystemMessage: 'system-role', supportsFIM: false, reasoningCapabilities: false,
-			cost: { input: 0, output: 0 }, downloadable: { sizeGb: 3.7 },
-		},
+		// keys must match the served model ids exactly; registry ids sometimes keep the .litertlm suffix
+		'gemma-4-E2B-it': litertGemmaOptions,
+		'gemma-4-E2B-it.litertlm': litertGemmaOptions,
+		'gemma-4-E2B-it-gpu.litertlm': litertGemmaOptions,
+		'gemma-4-E4B-it': litertGemmaOptions,
+		'gemma-4-E4B-it.litertlm': litertGemmaOptions,
 	},
 	providerReasoningIOSettings: {},
 }

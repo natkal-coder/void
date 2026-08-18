@@ -15,7 +15,7 @@ import { IMetricsService } from '../common/metricsService.js';
 import { PostHog } from 'posthog-node'
 import { OPT_OUT_KEY } from '../common/storageKeys.js';
 
-// OrnithIDE: analytics are off unless a key is set (upstream Void shipped its own PostHog key here)
+// RecurseIDE: analytics are off unless a key is set (upstream Void shipped its own PostHog key here)
 const POSTHOG_KEY: string | null = null
 const POSTHOG_HOST = 'https://us.i.posthog.com'
 
@@ -92,7 +92,7 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		@IApplicationStorageMainService private readonly _appStorage: IApplicationStorageMainService,
 	) {
 		super()
-		// OrnithIDE: no analytics by default. To enable, set a PostHog project key here.
+		// RecurseIDE: no analytics by default. To enable, set a PostHog project key here.
 		this.client = POSTHOG_KEY ? new PostHog(POSTHOG_KEY, { host: POSTHOG_HOST }) : null
 
 		this.initialize() // async

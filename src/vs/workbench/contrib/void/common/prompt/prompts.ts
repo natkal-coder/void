@@ -423,6 +423,7 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
 	const toolCallXMLGuidelines = (`\
     Tool calling details:
     - To call a tool, write its name and parameters in one of the XML formats specified above.
+    - Write the opening tag EXACTLY as shown (e.g. <tool_name>). NEVER use <|tool_call|>, JSON, or any other function-calling syntax.
     - After you write the tool call, you must STOP and WAIT for the result.
     - All parameters are REQUIRED unless noted otherwise.
     - You are only allowed to output ONE tool call, and it must be at the END of your response.
@@ -463,7 +464,7 @@ Rules for REPL code:
 - Declare variables with \`var\` (not let/const) so re-running code never throws redeclaration errors.
 - Errors are returned as output; fix your code and call run_repl again.`
 
-	const strategy = `Strategy: start by probing \`context\` (print its length, the part headers, a few small slices) to understand its structure. Then split it into chunks sized to the sub-LLM budget and use llm_query / llm_query_batched over the chunks to extract or summarize what you need, storing results in variables. Combine the pieces, verify against the context, then give your final answer as a normal reply. Do not give a final answer before you have inspected the context. Answer only from the context - do not make things up.`
+	const strategy = `Strategy: start by probing \`context\` (print its length, the part headers, a few small slices) to understand its structure. PREFER plain JavaScript for anything mechanical - counting, filtering, searching, extracting lines that match a pattern (e.g. \`context.split('\\n').filter(l => l.includes('ERROR'))\`) - it is instant and never fails. Use llm_query / llm_query_batched ONLY for semantic work a regex cannot do (summarizing prose, answering questions about meaning), over chunks sized to the sub-LLM budget, storing results in variables. Combine the pieces, verify against the context, then give your final answer as a normal reply. Do not give a final answer before you have inspected the context. Answer only from the context - do not make things up.`
 
 	const toolDefinitions = includeXMLToolDefinitions ? systemToolsXMLPrompt('rlm', mcpTools) : null
 

@@ -59,7 +59,7 @@ registerAction2(class extends Action2 {
 		super({
 			id: 'voidDebugInfo',
 			f1: true,
-			title: localize2('voidMetricsDebug', 'OrnithIDE: Log Debug Info'),
+			title: localize2('voidMetricsDebug', 'RecurseIDE: Log Debug Info'),
 		});
 	}
 	async run(accessor: ServicesAccessor): Promise<void> {

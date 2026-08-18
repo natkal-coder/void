@@ -20,7 +20,7 @@ registerAction2(class extends Action2 {
 		super({
 			f1: true,
 			id: 'void.setupLocalOrnith',
-			title: localize2('voidSetupOrnith', 'OrnithIDE: Set Up Local Ornith Model'),
+			title: localize2('voidSetupOrnith', 'RecurseIDE: Set Up Local Ornith Model'),
 		});
 	}
 	async run(accessor: ServicesAccessor) {
@@ -74,7 +74,7 @@ registerAction2(class extends Action2 {
 		super({
 			f1: true,
 			id: 'void.setupLiteRT',
-			title: localize2('voidSetupLiteRT', 'OrnithIDE: Set Up LiteRT Models (Lightweight)'),
+			title: localize2('voidSetupLiteRT', 'RecurseIDE: Set Up LiteRT Models (Lightweight)'),
 		});
 	}
 	async run(accessor: ServicesAccessor) {

@@ -108,8 +108,8 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 			baseURL: 'https://openrouter.ai/api/v1',
 			apiKey: thisConfig.apiKey,
 			defaultHeaders: {
-				'HTTP-Referer': 'https://github.com/natkal-coder/OrnithIDE', // Optional, for including your app on openrouter.ai rankings.
-				'X-Title': 'OrnithIDE', // Optional. Shows in rankings on openrouter.ai.
+				'HTTP-Referer': 'https://github.com/natkal-coder/RecurseIDE', // Optional, for including your app on openrouter.ai rankings.
+				'X-Title': 'RecurseIDE', // Optional. Shows in rankings on openrouter.ai.
 			},
 			...commonPayloadOpts,
 		})
@@ -380,7 +380,7 @@ const _sendOpenAICompatibleChat = async ({ messages, onText, onFinalMessage, onE
 			}
 			// on final
 			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
-				onError({ message: 'OrnithIDE: Response from model was empty.', fullError: null })
+				onError({ message: 'RecurseIDE: Response from model was empty.', fullError: null })
 			}
 			else {
 				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)
@@ -825,7 +825,7 @@ const sendGeminiChat = async ({
 
 			// on final
 			if (!fullTextSoFar && !fullReasoningSoFar && !toolName) {
-				onError({ message: 'OrnithIDE: Response from model was empty.', fullError: null })
+				onError({ message: 'RecurseIDE: Response from model was empty.', fullError: null })
 			} else {
 				if (!toolId) toolId = generateUuid() // ids are empty, but other providers might expect an id
 				const toolCall = rawToolCallObjOfParamsStr(toolName, toolParamsStr, toolId)

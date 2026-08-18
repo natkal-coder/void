@@ -347,6 +347,24 @@ export const extractXMLToolsWrapper = (
 		newOnText({ ...params })
 
 		fullText = fullText.trimEnd()
+
+		// recovery pass: small local models often emit their native function-calling syntax
+		// instead of our XML (observed: gemma's `<|tool_call>call:run_repl <code>...`). If no tool
+		// call parsed, normalize those prefixes to the expected `<toolname>` tag and re-parse once.
+		if (latestToolCall === undefined) {
+			const names = tools.map(t => t.name).join('|')
+			const altOpenRe = new RegExp(`<\\|tool_call\\|?>\\s*(?:call\\s*[:.])?\\s*(${names})\\b>?`, 'g')
+			const normalized = params.fullText.replace(altOpenRe, '<$1>')
+			if (normalized !== params.fullText) {
+				const i = findIndexOfAny(normalized, toolOpenTags)
+				if (i !== null) {
+					const [idx, toolTag] = i
+					const toolName = toolTag.substring(1, toolTag.length - 1) as ToolName
+					latestToolCall = parseXMLPrefixToToolCall(toolName, toolId, normalized.substring(idx), toolOfToolName)
+					fullText = normalized.substring(0, idx).trimEnd()
+				}
+			}
+		}
 		const toolCall = latestToolCall
 
 		// console.log('final message!!!', trueFullText)

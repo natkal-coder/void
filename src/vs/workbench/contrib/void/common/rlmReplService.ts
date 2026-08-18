@@ -33,7 +33,7 @@ const subcallConfigForSelection = (modelSelection: ModelSelection, settingsOfPro
 	const { providerName, modelName } = modelSelection
 	const common = { model: modelName, concurrency: 4, timeoutMs: RLM_SUBCALL_TIMEOUT_MS, headers: {} as { [k: string]: string } }
 
-	if (providerName === 'ollama' || providerName === 'vLLM' || providerName === 'lmStudio' || providerName === 'llamaServer' || providerName === 'liteLLM') {
+	if (providerName === 'ollama' || providerName === 'vLLM' || providerName === 'lmStudio' || providerName === 'llamaServer' || providerName === 'liteRT' || providerName === 'liteLLM') {
 		const { endpoint } = settingsOfProvider[providerName]
 		return { ...common, url: `${endpoint}/v1/chat/completions`, apiKey: 'noop' }
 	}

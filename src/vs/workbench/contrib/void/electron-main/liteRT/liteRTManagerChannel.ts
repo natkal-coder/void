@@ -3,7 +3,7 @@
  *  Licensed under the Apache License, Version 2.0. See LICENSE.txt for more information.
  *--------------------------------------------------------------------------------------*/
 
-// Manages Google LiteRT-LM (litert-community models) as OrnithIDE's lightweight local tier.
+// Manages Google LiteRT-LM (litert-community models) as RecurseIDE's lightweight local tier.
 // LiteRT-LM ships as a Python >=3.10 CLI whose `litert-lm serve` exposes an official
 // OpenAI-compatible API (GET /v1/models, POST /v1/chat/completions, streaming) - so there
 // is no custom bridge here: we bootstrap a private venv in <userData>/litert, `pip install
@@ -20,7 +20,8 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { Emitter, Event } from '../../../../../base/common/event.js';
 import { IServerChannel } from '../../../../../base/parts/ipc/common/ipc.js';
-import { LiteRTStatus, LiteRTProgress, LITERT_SERVER_PORT, LITERT_DEFAULT_MODEL } from '../../common/liteRTManagerTypes.js';
+import * as os from 'os';
+import { LiteRTStatus, LiteRTProgress, LITERT_SERVER_PORT, LITERT_DEFAULT_MODEL, LITERT_MAX_NUM_TOKENS } from '../../common/liteRTManagerTypes.js';
 
 const MODELS_URL = `http://127.0.0.1:${LITERT_SERVER_PORT}/v1/models`
 
@@ -140,6 +141,9 @@ export class LiteRTManagerChannel implements IServerChannel {
 			if (imp.code !== 0 && !imp.tail.toLowerCase().includes('exist')) {
 				return { ok: false, error: `Model import failed: ${imp.tail}` }
 			}
+			// 2b. raise the serve-side context ceiling for this model - litert serve returns
+			// HTTP 500 on prompts beyond its configured max_num_tokens (default is small)
+			this._writeModelConfig(id, { max_num_tokens: LITERT_MAX_NUM_TOKENS })
 			// 3. serve
 			const started = await this._startServe()
 			if (!started.ok) return started
@@ -151,9 +155,22 @@ export class LiteRTManagerChannel implements IServerChannel {
 		}
 	}
 
+	// merge per-model settings into ~/.litert-lm/config.json without clobbering user edits
+	private _writeModelConfig(modelId: string, settings: { [k: string]: unknown }) {
+		try {
+			const cfgPath = path.join(os.homedir(), '.litert-lm', 'config.json')
+			let cfg: any = {}
+			try { cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf8')) } catch { }
+			cfg.models = cfg.models ?? {}
+			cfg.models[modelId] = { ...cfg.models[modelId], ...settings }
+			fs.mkdirSync(path.dirname(cfgPath), { recursive: true })
+			fs.writeFileSync(cfgPath, JSON.stringify(cfg, null, 2))
+		} catch { /* config is an optimization; serve still works without it */ }
+	}
+
 	private async _startServe(): Promise<{ ok: true } | { ok: false, error: string }> {
 		if (await fetchModelIds() !== null) return { ok: true } // something already serves the port
-		if (!fs.existsSync(this.cliPath)) return { ok: false, error: 'LiteRT-LM is not set up yet. Run "OrnithIDE: Set Up LiteRT Models".' }
+		if (!fs.existsSync(this.cliPath)) return { ok: false, error: 'LiteRT-LM is not set up yet. Run "RecurseIDE: Set Up LiteRT Models".' }
 
 		try { this.serverProc?.kill() } catch { }
 		this.serverProc = spawn(this.cliPath, ['serve', '--host', '127.0.0.1', '--port', String(LITERT_SERVER_PORT)], { stdio: 'ignore', windowsHide: true })

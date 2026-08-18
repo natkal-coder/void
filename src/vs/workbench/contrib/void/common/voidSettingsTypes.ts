@@ -134,7 +134,7 @@ export const subTextMdOfProviderName = (providerName: ProviderName): string => {
 	if (providerName === 'vLLM') return 'Read more about custom [Endpoints here](https://docs.vllm.ai/en/latest/getting_started/quickstart.html#openai-compatible-server).'
 	if (providerName === 'lmStudio') return 'Read more about custom [Endpoints here](https://lmstudio.ai/docs/app/api/endpoints/openai).'
 	if (providerName === 'llamaServer') return 'A local `llama-server` (llama.cpp) with an OpenAI-compatible API. Serves the local Ornith 9B model on port 8086 by default.'
-	if (providerName === 'liteRT') return 'Lightweight on-device models (Gemma, Qwen, and more from [litert-community](https://huggingface.co/litert-community)) via OrnithIDE\'s built-in LiteRT-LM bridge. Best for quick chat on machines without a GPU.'
+	if (providerName === 'liteRT') return 'Lightweight on-device models (Gemma, Qwen, and more from [litert-community](https://huggingface.co/litert-community)) via RecurseIDE\'s built-in LiteRT-LM bridge. Best for quick chat on machines without a GPU.'
 	if (providerName === 'liteLLM') return 'Read more about endpoints [here](https://docs.litellm.ai/docs/providers/openai_compatible).'
 
 	throw new Error(`subTextMdOfProviderName: Unknown provider name: "${providerName}"`)
@@ -485,7 +485,7 @@ export const defaultGlobalSettings: GlobalSettings = {
 	syncApplyToChat: true,
 	syncSCMToChat: true,
 	enableFastApply: true,
-	chatMode: 'agent',
+	chatMode: 'rlm', // RecurseIDE default: RLM is the product's signature mode
 	autoApprove: {},
 	showInlineSuggestions: true,
 	includeToolLintErrors: true,
