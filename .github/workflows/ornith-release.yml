@@ -33,19 +33,21 @@ jobs:
       matrix:
         include:
           - os: ubuntu-22.04
-            gulp_task: vscode-linux-x64-min
+            gulp_task: vscode-linux-x64
             out_dir: VSCode-linux-x64
             llama_asset_suffix: bin-ubuntu-x64.tar.gz
           - os: windows-2022
-            gulp_task: vscode-win32-x64-min
+            gulp_task: vscode-win32-x64
             out_dir: VSCode-win32-x64
             llama_asset_suffix: bin-win-cpu-x64.zip
           - os: macos-14
-            gulp_task: vscode-darwin-arm64-min
+            gulp_task: vscode-darwin-arm64
             out_dir: VSCode-darwin-arm64
             llama_asset_suffix: bin-macos-arm64.tar.gz
     runs-on: ${{ matrix.os }}
     timeout-minutes: 120
+    env:
+      NODE_OPTIONS: --max-old-space-size=8192
     steps:
       - uses: actions/checkout@v4
 
