@@ -51,6 +51,9 @@ export const defaultProviderSettings = {
 	llamaServer: { // llama.cpp llama-server (serves Ornith 9B by default)
 		endpoint: 'http://localhost:8086',
 	},
+	liteRT: { // OrnithIDE's built-in bridge around Google LiteRT-LM (litert-community models)
+		endpoint: 'http://localhost:8087',
+	},
 	liteLLM: { // https://docs.litellm.ai/docs/providers/openai_compatible
 		endpoint: '',
 	},
@@ -118,6 +121,7 @@ export const defaultModelsOfProvider = {
 	],
 	lmStudio: [], // autodetected
 	llamaServer: [], // autodetected
+	liteRT: [], // autodetected
 
 	openRouter: [ // https://openrouter.ai/models
 		// 'anthropic/claude-3.7-sonnet:thinking',
@@ -1255,6 +1259,24 @@ const llamaServerSettings: VoidStaticProviderInfo = {
 	},
 }
 
+const liteRTSettings: VoidStaticProviderInfo = {
+	// most litert-community builds have ekv4096 (4K) contexts; gemma-4 E2B/E4B litertlm go to 32K
+	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' }, contextWindow: 4_096, reservedOutputTokenSpace: 1_024, supportsSystemMessage: 'system-role', reasoningCapabilities: false }),
+	modelOptions: {
+		'gemma-4-E2B-it': {
+			contextWindow: 32_768, reservedOutputTokenSpace: 2_048,
+			supportsSystemMessage: 'system-role', supportsFIM: false, reasoningCapabilities: false,
+			cost: { input: 0, output: 0 }, downloadable: { sizeGb: 2.6 },
+		},
+		'gemma-4-E4B-it': {
+			contextWindow: 32_768, reservedOutputTokenSpace: 2_048,
+			supportsSystemMessage: 'system-role', supportsFIM: false, reasoningCapabilities: false,
+			cost: { input: 0, output: 0 }, downloadable: { sizeGb: 3.7 },
+		},
+	},
+	providerReasoningIOSettings: {},
+}
+
 const ollamaSettings: VoidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' } }),
 	modelOptions: ollamaModelOptions,
@@ -1493,6 +1515,7 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProvi
 	liteLLM: liteLLMSettings,
 	lmStudio: lmStudioSettings,
 	llamaServer: llamaServerSettings,
+	liteRT: liteRTSettings,
 
 	googleVertex: googleVertexSettings,
 	microsoftAzure: microsoftAzureSettings,

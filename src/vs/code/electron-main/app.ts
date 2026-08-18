@@ -135,6 +135,7 @@ import { IVoidSCMService } from '../../workbench/contrib/void/common/voidSCMType
 import { MCPChannel } from '../../workbench/contrib/void/electron-main/mcpChannel.js';
 import { RLMReplChannel } from '../../workbench/contrib/void/electron-main/rlmRepl/rlmReplChannel.js';
 import { LlamaManagerChannel } from '../../workbench/contrib/void/electron-main/llamaManager/llamaManagerChannel.js';
+import { LiteRTManagerChannel } from '../../workbench/contrib/void/electron-main/liteRT/liteRTManagerChannel.js';
 /**
  * The main VS Code application. There will only ever be one instance,
  * even if the user starts many instances (e.g. from the command line).
@@ -1263,6 +1264,10 @@ export class CodeApplication extends Disposable {
 		// Void added this - bundled local llama.cpp server / Ornith model manager
 		const llamaManagerChannel = new LlamaManagerChannel();
 		mainProcessElectronServer.registerChannel('void-channel-llama-manager', llamaManagerChannel);
+
+		// Void added this - LiteRT-LM (litert-community lightweight models) manager
+		const liteRTManagerChannel = new LiteRTManagerChannel();
+		mainProcessElectronServer.registerChannel('void-channel-litert', liteRTManagerChannel);
 
 		// Extension Host Debug Broadcasting
 		const electronExtensionHostDebugBroadcastChannel = new ElectronExtensionHostDebugBroadcastChannel(accessor.get(IWindowsMainService));

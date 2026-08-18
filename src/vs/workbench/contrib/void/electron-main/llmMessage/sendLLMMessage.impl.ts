@@ -98,6 +98,10 @@ const newOpenAICompatibleSDK = async ({ settingsOfProvider, providerName, includ
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
 	}
+	else if (providerName === 'liteRT') {
+		const thisConfig = settingsOfProvider[providerName]
+		return new OpenAI({ baseURL: `${thisConfig.endpoint}/v1`, apiKey: 'noop', ...commonPayloadOpts })
+	}
 	else if (providerName === 'openRouter') {
 		const thisConfig = settingsOfProvider[providerName]
 		return new OpenAI({
@@ -924,6 +928,11 @@ export const sendLLMMessageToProviderImplementation = {
 	llamaServer: {
 		sendChat: (params) => _sendOpenAICompatibleChat(params),
 		sendFIM: (params) => _sendOpenAICompatibleFIM(params),
+		list: (params) => _openaiCompatibleList(params),
+	},
+	liteRT: {
+		sendChat: (params) => _sendOpenAICompatibleChat(params),
+		sendFIM: null, // bridge does not implement /completions
 		list: (params) => _openaiCompatibleList(params),
 	},
 	liteLLM: {
