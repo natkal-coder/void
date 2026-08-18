@@ -15,6 +15,10 @@ import { IMetricsService } from '../common/metricsService.js';
 import { PostHog } from 'posthog-node'
 import { OPT_OUT_KEY } from '../common/storageKeys.js';
 
+// OrnithIDE: analytics are off unless a key is set (upstream Void shipped its own PostHog key here)
+const POSTHOG_KEY: string | null = null
+const POSTHOG_HOST = 'https://us.i.posthog.com'
+
 
 const os = isWindows ? 'windows' : isMacintosh ? 'mac' : isLinux ? 'linux' : null
 const _getOSInfo = () => {
@@ -35,7 +39,7 @@ const osInfo = _getOSInfo()
 export class MetricsMainService extends Disposable implements IMetricsService {
 	_serviceBrand: undefined;
 
-	private readonly client: PostHog
+	private readonly client: PostHog | null
 
 	private _initProperties: object = {}
 
@@ -88,9 +92,8 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 		@IApplicationStorageMainService private readonly _appStorage: IApplicationStorageMainService,
 	) {
 		super()
-		this.client = new PostHog('phc_UanIdujHiLp55BkUTjB1AuBXcasVkdqRwgnwRlWESH2', {
-			host: 'https://us.i.posthog.com',
-		})
+		// OrnithIDE: no analytics by default. To enable, set a PostHog project key here.
+		this.client = POSTHOG_KEY ? new PostHog(POSTHOG_KEY, { host: POSTHOG_HOST }) : null
 
 		this.initialize() // async
 	}
@@ -127,11 +130,11 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 
 		console.log('User is opted out of basic Void metrics?', didOptOut)
 		if (didOptOut) {
-			this.client.optOut()
+			this.client?.optOut()
 		}
 		else {
-			this.client.optIn()
-			this.client.identify(identifyMessage)
+			this.client?.optIn()
+			this.client?.identify(identifyMessage)
 		}
 
 
@@ -142,7 +145,7 @@ export class MetricsMainService extends Disposable implements IMetricsService {
 	capture: IMetricsService['capture'] = (event, params) => {
 		const capture = { distinctId: this.distinctId, event, properties: params } as const
 		// console.log('full capture:', this.distinctId)
-		this.client.capture(capture)
+		this.client?.capture(capture)
 	}
 
 	setOptOut: IMetricsService['setOptOut'] = (newVal: boolean) => {

@@ -251,12 +251,14 @@ const nameOfChatMode = {
 	'normal': 'Chat',
 	'gather': 'Gather',
 	'agent': 'Agent',
+	'rlm': 'RLM',
 }
 
 const detailOfChatMode = {
 	'normal': 'Normal chat',
 	'gather': 'Reads files, but can\'t edit',
 	'agent': 'Edits files and uses tools',
+	'rlm': 'Recursive: handles huge attachments via a REPL',
 }
 
 
@@ -266,7 +268,7 @@ const ChatModeDropdown = ({ className }: { className: string }) => {
 	const voidSettingsService = accessor.get('IVoidSettingsService')
 	const settingsState = useSettingsState()
 
-	const options: ChatMode[] = useMemo(() => ['normal', 'gather', 'agent'], [])
+	const options: ChatMode[] = useMemo(() => ['normal', 'gather', 'agent', 'rlm'], [])
 
 	const onChangeOption = useCallback((newVal: ChatMode) => {
 		voidSettingsService.setGlobalSetting('chatMode', newVal)
@@ -1420,6 +1422,7 @@ const titleOfBuiltinToolName = {
 
 	'read_lint_errors': { done: `Read lint errors`, proposed: 'Read lint errors', running: loadingTitleWrapper('Reading lint errors') },
 	'search_in_file': { done: 'Searched in file', proposed: 'Search in file', running: loadingTitleWrapper('Searching in file') },
+	'run_repl': { done: 'Ran REPL', proposed: 'Run REPL', running: loadingTitleWrapper('Running REPL') },
 } as const satisfies Record<BuiltinToolName, { done: any, proposed: any, running: any }>
 
 
@@ -1545,6 +1548,11 @@ const toolNameToDesc = (toolName: BuiltinToolName, _toolParams: BuiltinToolCallP
 		'kill_persistent_terminal': () => {
 			const toolParams = _toolParams as BuiltinToolCallParams['kill_persistent_terminal']
 			return { desc1: toolParams.persistentTerminalId }
+		},
+		'run_repl': () => {
+			const toolParams = _toolParams as BuiltinToolCallParams['run_repl']
+			const firstLine = (toolParams.code ?? '').trim().split('\n')[0] ?? ''
+			return { desc1: firstLine.length > 40 ? firstLine.slice(0, 40) + '…' : firstLine }
 		},
 		'get_dir_tree': () => {
 			const toolParams = _toolParams as BuiltinToolCallParams['get_dir_tree']
@@ -2432,6 +2440,47 @@ const builtinToolNameToComponent: { [T in BuiltinToolName]: { resultWrapper: Res
 				const { persistentTerminalId } = params
 				componentParams.desc1 = persistentTerminalNameOfId(persistentTerminalId)
 				componentParams.onClick = () => terminalToolsService.focusPersistentTerminal(persistentTerminalId)
+			}
+			else if (toolMessage.type === 'tool_error') {
+				const { result } = toolMessage
+				componentParams.bottomChildren = <BottomChildren title='Error'>
+					<CodeChildren>
+						{result}
+					</CodeChildren>
+				</BottomChildren>
+			}
+
+			return <ToolHeaderWrapper {...componentParams} />
+		},
+	},
+	'run_repl': {
+		resultWrapper: ({ toolMessage }) => {
+			const accessor = useAccessor()
+
+			const { desc1, desc1Info } = toolNameToDesc(toolMessage.name, toolMessage.params, accessor)
+			const title = getTitle(toolMessage)
+			const icon = null
+
+			const isError = false
+			const isRejected = toolMessage.type === 'rejected'
+			const componentParams: ToolHeaderParams = { title, desc1, desc1Info, isError, icon, isRejected, }
+
+			const code = toolMessage.params?.code ?? ''
+			if (toolMessage.type === 'success') {
+				const { result } = toolMessage
+				componentParams.children = <ToolChildrenWrapper className='whitespace-pre text-nowrap overflow-auto text-sm'>
+					<div className='!select-text cursor-auto'>
+						<BlockCode initValue={code.trim()} language='javascript' />
+						<BlockCode initValue={result.output.trim()} language='plaintext' />
+					</div>
+				</ToolChildrenWrapper>
+			}
+			else if (toolMessage.type === 'running_now' || toolMessage.type === 'tool_request') {
+				componentParams.children = <ToolChildrenWrapper className='whitespace-pre text-nowrap overflow-auto text-sm'>
+					<div className='!select-text cursor-auto'>
+						<BlockCode initValue={code.trim()} language='javascript' />
+					</div>
+				</ToolChildrenWrapper>
 			}
 			else if (toolMessage.type === 'tool_error') {
 				const { result } = toolMessage

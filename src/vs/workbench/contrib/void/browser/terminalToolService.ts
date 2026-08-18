@@ -53,13 +53,13 @@ export const ITerminalToolService = createDecorator<ITerminalToolService>('Termi
 
 
 export const persistentTerminalNameOfId = (id: string) => {
-	if (id === '1') return 'Void Agent'
-	return `Void Agent (${id})`
+	if (id === '1') return 'OrnithIDE Agent'
+	return `OrnithIDE Agent (${id})`
 }
 export const idOfPersistentTerminalName = (name: string) => {
-	if (name === 'Void Agent') return '1'
+	if (name === 'OrnithIDE Agent') return '1'
 
-	const match = name.match(/Void Agent \((\d+)\)/)
+	const match = name.match(/OrnithIDE Agent \((\d+)\)/)
 	if (!match) return null
 	if (Number.isInteger(match[1]) && Number(match[1]) >= 1) return match[1]
 	return null

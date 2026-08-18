@@ -48,6 +48,9 @@ export const defaultProviderSettings = {
 	lmStudio: {
 		endpoint: 'http://localhost:1234',
 	},
+	llamaServer: { // llama.cpp llama-server (serves Ornith 9B by default)
+		endpoint: 'http://localhost:8086',
+	},
 	liteLLM: { // https://docs.litellm.ai/docs/providers/openai_compatible
 		endpoint: '',
 	},
@@ -114,6 +117,7 @@ export const defaultModelsOfProvider = {
 	vLLM: [ // autodetected
 	],
 	lmStudio: [], // autodetected
+	llamaServer: [], // autodetected
 
 	openRouter: [ // https://openrouter.ai/models
 		// 'anthropic/claude-3.7-sonnet:thinking',
@@ -266,6 +270,12 @@ const openSourceModelOptions_assumingOAICompat = {
 		supportsSystemMessage: false, // unstable
 		reasoningCapabilities: false,
 		contextWindow: 32_000, reservedOutputTokenSpace: 4_096,
+	},
+	'ornith': { // ornith-1.0-9b served by llama-server; n_ctx 32768 is split across 4 slots by default, so assume 8192 per request
+		supportsFIM: false,
+		supportsSystemMessage: 'system-role',
+		reasoningCapabilities: false,
+		contextWindow: 8_192, reservedOutputTokenSpace: 2_048,
 	},
 	'deepseekCoderV2': {
 		supportsFIM: false,
@@ -441,6 +451,8 @@ const extensiveModelOptionsFallback: VoidStaticProviderInfo['modelOptionsFallbac
 	if (lower.includes('phi4')) return toFallback(openSourceModelOptions_assumingOAICompat, 'phi4')
 	if (lower.includes('codestral')) return toFallback(openSourceModelOptions_assumingOAICompat, 'codestral')
 	if (lower.includes('devstral')) return toFallback(openSourceModelOptions_assumingOAICompat, 'devstral')
+
+	if (lower.includes('ornith')) return toFallback(openSourceModelOptions_assumingOAICompat, 'ornith')
 
 	if (lower.includes('gemma')) return toFallback(openSourceModelOptions_assumingOAICompat, 'gemma')
 
@@ -1233,6 +1245,16 @@ const lmStudioSettings: VoidStaticProviderInfo = {
 	},
 }
 
+const llamaServerSettings: VoidStaticProviderInfo = {
+	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' } }),
+	modelOptions: {},
+	providerReasoningIOSettings: {
+		// llama-server emits <think> tags inline, parse them manually like lmStudio
+		input: { includeInPayload: openAICompatIncludeInPayloadReasoning },
+		output: { needsManualParse: true },
+	},
+}
+
 const ollamaSettings: VoidStaticProviderInfo = {
 	modelOptionsFallback: (modelName) => extensiveModelOptionsFallback(modelName, { downloadable: { sizeGb: 'not-known' } }),
 	modelOptions: ollamaModelOptions,
@@ -1470,6 +1492,7 @@ const modelSettingsOfProvider: { [providerName in ProviderName]: VoidStaticProvi
 
 	liteLLM: liteLLMSettings,
 	lmStudio: lmStudioSettings,
+	llamaServer: llamaServerSettings,
 
 	googleVertex: googleVertexSettings,
 	microsoftAzure: microsoftAzureSettings,

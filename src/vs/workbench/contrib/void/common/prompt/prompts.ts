@@ -11,6 +11,7 @@ import { os } from '../helpers/systemInfo.js';
 import { RawToolParamsObj } from '../sendLLMMessageTypes.js';
 import { approvalTypeOfBuiltinToolName, BuiltinToolCallParams, BuiltinToolName, BuiltinToolResultType, ToolName } from '../toolsServiceTypes.js';
 import { ChatMode } from '../voidSettingsTypes.js';
+import { RLMContextInfo } from '../rlmReplTypes.js';
 
 // Triple backtick wrapper used throughout the prompts for code blocks
 export const tripleTick = ['```', '```']
@@ -336,6 +337,16 @@ export const builtinTools: {
 		name: 'kill_persistent_terminal',
 		description: `Interrupts and closes a persistent terminal that you opened with open_persistent_terminal.`,
 		params: { persistent_terminal_id: { description: `The ID of the persistent terminal.` } }
+	},
+
+	// --- RLM mode only ---
+
+	run_repl: {
+		name: 'run_repl',
+		description: `Runs JavaScript code in your persistent RLM REPL (where \`context\`, \`llm_query\`, etc. live) and returns everything you print(...). State persists between calls.`,
+		params: {
+			code: { description: 'The JavaScript code to run. Use print(...) to see values - bare expressions are discarded. Declare variables with `var`.' },
+		},
 	}
 
 
@@ -361,9 +372,10 @@ export const isABuiltinToolName = (toolName: string): toolName is BuiltinToolNam
 export const availableTools = (chatMode: ChatMode | null, mcpTools: InternalToolInfo[] | undefined) => {
 
 	const builtinToolNames: BuiltinToolName[] | undefined = chatMode === 'normal' ? undefined
-		: chatMode === 'gather' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName))
-			: chatMode === 'agent' ? Object.keys(builtinTools) as BuiltinToolName[]
-				: undefined
+		: chatMode === 'gather' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => !(toolName in approvalTypeOfBuiltinToolName) && toolName !== 'run_repl')
+			: chatMode === 'agent' ? (Object.keys(builtinTools) as BuiltinToolName[]).filter(toolName => toolName !== 'run_repl')
+				: chatMode === 'rlm' ? ['run_repl']
+					: undefined
 
 	const effectiveBuiltinTools = builtinToolNames?.map(toolName => builtinTools[toolName]) ?? undefined
 	const effectiveMCPTools = chatMode === 'agent' ? mcpTools : undefined
@@ -422,10 +434,48 @@ const systemToolsXMLPrompt = (chatMode: ChatMode, mcpTools: InternalToolInfo[] |
     ${toolCallXMLGuidelines}`
 }
 
+// ======================================================== chat (rlm) ========================================================
+
+// System message for RLM (Recursive Language Model) mode: the attached content lives in a
+// persistent JS REPL as `context`, and the root model works on it through the run_repl tool
+// with synchronous sub-LLM calls. Method: "Recursive Language Models" (Zhang, 2025), depth-1.
+// Deliberately compact - RLM mode is often driven by a small local root model.
+const rlm_systemMessage = (rlmContextInfo: RLMContextInfo | undefined, mcpTools: InternalToolInfo[] | undefined, includeXMLToolDefinitions: boolean) => {
+	const { totalChars = 0, partNames = [], truncateChars = 20_000, subcallCharBudget = 50_000 } = rlmContextInfo ?? {}
+
+	const header = totalChars === 0
+		? `You are an assistant in RLM mode, but the user attached no files or selections, so the REPL \`context\` is empty. If the query needs no attached content, just answer it normally without tools. Otherwise, ask the user to attach files by typing @.`
+		: `You are a Recursive Language Model (RLM) assistant. The user's query is about content that is too large to read directly. That content is NOT in this conversation - it is stored in a persistent JavaScript REPL as the string variable \`context\` (${totalChars} characters total, ${partNames.length} part${partNames.length === 1 ? '' : 's'}:
+${partNames.map(n => `- ${n}`).join('\n')}).
+
+You interact with the REPL by calling the run_repl tool, then reading its output, turn by turn. When you can answer the user's query, reply WITHOUT calling the tool - that reply is your final answer.`
+
+	const replApi = `The REPL environment (JavaScript; variables persist across run_repl calls):
+- \`context\`: string holding all attached content. Each part starts with a '===== <name> =====' header line.
+- \`llm_query(prompt: string): string\` - one synchronous sub-LLM call. Use it for extraction, summarization, or Q&A over a slice of \`context\`. Keep each prompt under ~${subcallCharBudget} characters.
+- \`llm_query_batched(prompts: string[]): string[]\` - several sub-LLM calls in parallel; results come back in the same order.
+- \`rlm_query\` / \`rlm_query_batched\`: same as the above.
+- \`SHOW_VARS(): string\` - lists your variables.
+- \`print(...)\` / \`console.log(...)\`: ONLY printed output is returned to you. A bare expression on the last line is silently discarded - always wrap inspections in print(...). Output is truncated at ${truncateChars} characters, so print small slices and push long text through llm_query instead of printing it.
+
+Rules for REPL code:
+- Everything is synchronous. NEVER use await, async, promises, fetch, require, or setTimeout.
+- Declare variables with \`var\` (not let/const) so re-running code never throws redeclaration errors.
+- Errors are returned as output; fix your code and call run_repl again.`
+
+	const strategy = `Strategy: start by probing \`context\` (print its length, the part headers, a few small slices) to understand its structure. Then split it into chunks sized to the sub-LLM budget and use llm_query / llm_query_batched over the chunks to extract or summarize what you need, storing results in variables. Combine the pieces, verify against the context, then give your final answer as a normal reply. Do not give a final answer before you have inspected the context. Answer only from the context - do not make things up.`
+
+	const toolDefinitions = includeXMLToolDefinitions ? systemToolsXMLPrompt('rlm', mcpTools) : null
+
+	const ansStrs = totalChars === 0 ? [header] : [header, replApi, toolDefinitions, strategy].filter(s => !!s) as string[]
+	return ansStrs.join('\n\n\n').trim().replace('\t', '  ')
+}
+
 // ======================================================== chat (normal, gather, agent) ========================================================
 
 
-export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, persistentTerminalIDs, directoryStr, chatMode: mode, mcpTools, includeXMLToolDefinitions }: { workspaceFolders: string[], directoryStr: string, openedURIs: string[], activeURI: string | undefined, persistentTerminalIDs: string[], chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined, includeXMLToolDefinitions: boolean }) => {
+export const chat_systemMessage = ({ workspaceFolders, openedURIs, activeURI, persistentTerminalIDs, directoryStr, chatMode: mode, mcpTools, includeXMLToolDefinitions, rlmContextInfo }: { workspaceFolders: string[], directoryStr: string, openedURIs: string[], activeURI: string | undefined, persistentTerminalIDs: string[], chatMode: ChatMode, mcpTools: InternalToolInfo[] | undefined, includeXMLToolDefinitions: boolean, rlmContextInfo?: RLMContextInfo }) => {
+	if (mode === 'rlm') return rlm_systemMessage(rlmContextInfo, mcpTools, includeXMLToolDefinitions)
 	const header = (`You are an expert coding ${mode === 'agent' ? 'agent' : 'assistant'} whose job is \
 ${mode === 'agent' ? `to help the user develop, run, and make changes to their codebase.`
 			: mode === 'gather' ? `to search, understand, and reference files in the user's codebase.`
@@ -621,9 +671,17 @@ export const chat_userMessageContent = async (
 	currSelns: StagingSelectionItem[] | null,
 	opts: {
 		directoryStrService: IDirectoryStrService,
-		fileService: IFileService
+		fileService: IFileService,
+		selectionNamesOnly?: boolean, // rlm mode: contents go to the REPL `context`, not into the message
 	},
 ) => {
+
+	if (opts.selectionNamesOnly) {
+		const names = (currSelns ?? []).map(s => s.uri.fsPath + (s.type === 'CodeSelection' ? ` (lines ${s.range[0]}:${s.range[1]})` : ''))
+		let str = `${instructions}`
+		if (names.length !== 0) str += `\n---\nATTACHED (contents are in the REPL \`context\` variable):\n${names.join('\n')}`
+		return str
+	}
 
 	const selnsStrs = await Promise.all(
 		(currSelns ?? []).map(async (s) =>
